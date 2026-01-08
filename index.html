@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Truco Venezolano</title>
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#020617">
+<link rel="apple-touch-icon" href="icon-192.png">
+
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --bg:#020617;--border:#1e293b;--text:#e5e7eb;--muted:#64748b;
+}
+*{
+  box-sizing:border-box;
+  font-family:Inter;
+  -webkit-tap-highlight-color:transparent;
+}
+body{
+  margin:0;
+  background:radial-gradient(circle at top,#020617,#000);
+  color:var(--text);
+  min-height:100vh;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+}
+.app{
+  width:100%;
+  max-width:420px;
+  padding:16px;
+}
+h1{
+  text-align:center;
+  margin-bottom:10px;
+}
+.controls{
+  display:flex;
+  justify-content:center;
+  gap:8px;
+  margin-bottom:14px;
+}
+button{
+  padding:8px 12px;
+  border-radius:10px;
+  background:#020617;
+  border:1px solid var(--border);
+  color:var(--text);
+  font-size:14px;
+}
+button.active{
+  background:#1e293b;
+}
+.teams{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:14px;
+}
+.team{
+  border:1px solid var(--border);
+  border-radius:18px;
+  padding:14px;
+  text-align:center;
+}
+.stage{
+  font-size:13px;
+  color:var(--muted);
+}
+.tokens{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:center;
+  gap:6px;
+  margin:10px 0;
+  min-height:40px;
+}
+.token{
+  width:18px;
+  height:18px;
+}
+.stones{background:#71717a;border-radius:50%}
+.caps{background:#ef4444;border-radius:4px}
+.beans{background:#92400e;border-radius:50%}
+.hint{
+  font-size:11px;
+  color:var(--muted);
+}
+.reset{
+  margin-top:16px;
+  width:100%;
+  padding:12px;
+  border-radius:14px;
+  background:#1e293b;
+  border:none;
+  color:white;
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <h1>🃏 Truco Venezolano</h1>
+
+  <!-- PUNTAJE -->
+  <div class="controls">
+    <button onclick="setTarget(12)">12</button>
+    <button onclick="setTarget(18)">18</button>
+    <button onclick="setTarget(24)">24</button>
+  </div>
+
+  <!-- FICHAS -->
+  <div class="controls">
+    <button onclick="setStyle('stones')">🪨</button>
+    <button onclick="setStyle('caps')">🥤</button>
+    <button onclick="setStyle('beans')">🌰</button>
+  </div>
+
+  <div class="teams" id="teams"></div>
+
+  <button class="reset" onclick="resetGame()">Reiniciar partida</button>
+</div>
+
+<script>
+/* ===============================
+   ESTADO Y CONFIG
+================================ */
+const STORAGE = 'truco-venezolano';
+
+let state = loadState() || {
+  target: 12,
+  style: 'stones',
+  teams: [
+    { name:'Nosotros', points:0 },
+    { name:'Ellos', points:0 }
+  ]
+};
+
+/* ===============================
+   RENDER
+================================ */
+function render(){
+  const mitad = state.target / 2;
+
+  // botones activos
+  document.querySelectorAll('.controls button').forEach(b=>{
+    const v = parseInt(b.textContent);
+    if (!isNaN(v)) b.classList.toggle('active', v === state.target);
+  });
+
+  const container = document.getElementById('teams');
+  container.innerHTML = '';
+
+  state.teams.forEach((team,i)=>{
+    const esBuenas = team.points > mitad;
+    const visibles = esBuenas ? team.points - mitad : team.points;
+
+    const card = document.createElement('div');
+    card.className = 'team';
+    card.innerHTML = `
+      <h3>${team.name}</h3>
+      <div class="stage">${esBuenas ? 'Buenas' : 'Malas'}</div>
+      <div class="tokens">
+        ${Array.from({length:visibles}).map(() =>
+          <div class="token ${state.style}"></div>
+        ).join('')}
+      </div>
+      <div class="hint">⬆ sumar · ⬇ restar</div>
+    `;
+
+    attachGestures(card,i);
+    container.appendChild(card);
+  });
+
+  saveState();
+}
+
+/* ===============================
+   LÓGICA
+================================ */
+function addPoint(i,v){
+  const t = state.teams[i];
+  t.points = Math.max(0, t.points + v);
+
+  if (t.points === state.target){
+    navigator.vibrate?.(80);
+    alert(🏆 Ganó ${t.name});
+    resetGame();
+    return;
+  }
+  render();
+}
+
+function resetGame(){
+  state.teams.forEach(t=>t.points=0);
+  render();
+}
+
+function setTarget(t){
+  state.target = t;
+  resetGame();
+}
+
+function setStyle(s){
+  state.style = s;
+  render();
+}
+
+/* ===============================
+   GESTOS
+================================ */
+function attachGestures(el,i){
+  let startY = 0;
+  el.ontouchstart = e => startY = e.touches[0].clientY;
+  el.ontouchend = e => {
+    const diff = startY - e.changedTouches[0].clientY;
+    if (Math.abs(diff) > 30) addPoint(i, diff > 0 ? 1 : -1);
+  };
+}
+
+/* ===============================
+   STORAGE
+================================ */
+function saveState(){
+  localStorage.setItem(STORAGE, JSON.stringify(state));
+}
+function loadState(){
+  const s = localStorage.getItem(STORAGE);
+  return s ? JSON.parse(s) : null;
+}
+
+/* ===============================
+   PWA
+================================ */
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js');
+}
+
+render();
+</script>
+
+</body>
+</html>
