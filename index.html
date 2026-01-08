@@ -241,7 +241,141 @@ if ('serviceWorker' in navigator) {
 }
 
 render();
-</script>
+<script>
+const STORAGE = 'truco-venezolano';
 
-</body>
-</html>
+let state = loadState() || {
+  target: 12,
+  style: 'stones',
+  teams: [
+    { name:'Nosotros', points:0 },
+    { name:'Ellos', points:0 }
+  ]
+};
+
+function render(){
+  const mitad = state.target / 2;
+
+  document.querySelectorAll('.controls button').forEach(b=>{
+    const v = parseInt(b.textContent);
+    if (!isNaN(v)) b.classList.toggle('active', v === state.target);
+  });
+
+  const container = document.getElementById('teams');
+  container.innerHTML = '';
+
+  state.teams.forEach((team,i)=>{
+    const esBuenas = team.points > mitad;
+    const visibles = esBuenas ? team.points - mitad : team.points;
+
+    const card = document.createElement('div');
+    card.className = 'team';
+    card.innerHTML = `
+      <h3>${team.name}</h3>
+      <div class="stage">${esBuenas ? 'Buenas' : 'Malas'}</div>
+      <div class="tokens">
+        ${Array.from({ length: visibles })
+          .map(() => `<div class="token ${state.style}"></div>`)
+          .join('')}
+      </div>
+      <div class="hint">⬆ sumar · ⬇ restar</div>
+    `;
+
+    attachGestures(card,i);
+    container.appendChild(card);
+  });
+
+  saveState();
+}
+
+function addPoint(i,v){
+  const t = state.teams[i];
+  t.points = Math.max(0, t.points + v);
+
+  if (t.points === state.target){
+    navigator.vibrate?.(80);
+    alert(`🏆 Ganó ${t.name}`);
+    resetGame();
+    return;
+  }
+  render();
+}
+
+function resetGame(){
+  state.teams.forEach(t=>t.points=0);
+  render();
+}
+
+function setTarget(t){
+  state.target = t;
+  resetGame();
+}
+
+function setStyle(s){
+  state.style = s;
+  render();
+}
+
+function attachGestures(el,i){
+  let startY = 0;
+  el.addEventListener('touchstart', e => {
+    startY = e.touches[0].clientY;
+  });
+
+  el.addEventListener('touchend', e => {
+    const diff = startY - e.changedTouches[0].clientY;
+    if (Math.abs(diff) > 30) {
+      addPoint(i, diff > 0 ? 1 : -1);
+    }
+  });
+}
+
+function saveState(){
+  localStorage.setItem(STORAGE, JSON.stringify(state));
+}
+
+function loadState(){
+  const s = localStorage.getItem(STORAGE);
+  return s ? JSON.parse(s) : null;
+}
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js');
+}
+
+render();
+<script>
+function attachGestures(el, i) {
+  let pressTimer = null;
+  let longPress = false;
+
+  /* ========= TOUCH (iPhone / Android) ========= */
+  el.addEventListener('touchstart', e => {
+    longPress = false;
+
+    pressTimer = setTimeout(() => {
+      longPress = true;
+      addPoint(i, -1); // tap largo resta
+      navigator.vibrate?.(40);
+    }, 500);
+  }, { passive: true });
+
+  el.addEventListener('touchend', () => {
+    clearTimeout(pressTimer);
+    if (!longPress) {
+      addPoint(i, 1); // tap suma
+      navigator.vibrate?.(20);
+    }
+  });
+
+  /* ========= CLICK (WEB / PC) ========= */
+  el.addEventListener('click', () => {
+    addPoint(i, 1); // click suma
+  });
+
+  el.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    addPoint(i, -1); // click derecho resta
+  });
+}
+<script>
